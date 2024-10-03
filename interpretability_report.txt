@@ -1,0 +1,12 @@
+Model Interpretability Report
+=============================
+Model: xlm-roberta-base
+Metrics: {'eval_loss': 0.0, 'eval_runtime': 0.8961, 'eval_samples_per_second': 11.159, 'eval_steps_per_second': 2.232, 'epoch': 3.0}
+
+Model: distilbert-base-multilingual-cased
+Metrics: {'eval_loss': 0.0, 'eval_runtime': 0.3141, 'eval_samples_per_second': 31.834, 'eval_steps_per_second': 6.367, 'epoch': 3.0}
+
+Model: bert-base-multilingual-cased
+Metrics: {'eval_loss': 0.0, 'eval_runtime': 0.428, 'eval_samples_per_second': 23.364, 'eval_steps_per_second': 4.673, 'epoch': 3.0}
+
+SHAP and LIME Analysis Completed

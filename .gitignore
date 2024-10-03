@@ -1,0 +1,16 @@
+# Ignore CSV files
+*.csv
+
+# Ignore large files and folders
+fine_tuned_ner_model/
+results/
+
+# Ignore virtual environment
+.venv/
+
+# Ignore logs
+logs/
+
+# Ignore output or session files
+*.session
+*.tfevents

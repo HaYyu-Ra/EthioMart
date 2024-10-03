@@ -1,0 +1,31 @@
+# Requirements for EthioMart Project
+
+# Data manipulation and analysis
+pandas>=1.5.0
+
+# Machine learning libraries
+scikit-learn>=1.0.2
+joblib>=1.1.0
+shap>=0.41.0
+
+# Natural Language Processing
+spacy>=3.0.0
+transformers>=4.0.0
+nltk>=3.6.0
+
+# Telegram API wrapper
+telethon>=1.24.0
+
+# Plotting and visualization
+matplotlib>=3.5.0
+seaborn>=0.11.0
+
+# For Jupyter Notebooks
+ipykernel>=6.0.0
+
+# Optional: If using Flask or FastAPI for web applications
+# Uncomment the following lines if needed
+# flask>=2.0.0
+# fastapi>=0.65.0
+
+# Additional libraries can be added as needed
