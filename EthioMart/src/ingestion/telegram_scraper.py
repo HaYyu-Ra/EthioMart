@@ -1,137 +1,101 @@
-import pandas as pd
-import numpy as np
-import torch
-from torch.utils.data import Dataset
-from transformers import (
-    XLMRobertaForTokenClassification,
-    AutoTokenizer,
-    Trainer,
-    TrainingArguments,
-    DataCollatorForTokenClassification
-)
+import asyncio
+import csv
+import re
+from telethon import TelegramClient
+from telethon.errors import UsernameInvalidError, ChannelPrivateError, PeerFloodError
 
-# Define your dataset class
-class NERDataset(Dataset):
-    def __init__(self, encodings, labels):
-        self.encodings = encodings
-        self.labels = labels
+# Your API credentials
+API_ID = '22719059'  # Your API ID
+API_HASH = '2a3f5d1d5e677274fc404071bb6bf1bd'  # Your API Hash
 
-    def __getitem__(self, idx):
-        item = {key: torch.tensor(val[idx]) for key, val in self.encodings.items()}
-        item['labels'] = torch.tensor(self.labels[idx])
-        return item
+# Define the channel username
+CHANNEL_USERNAME = 'Fashiontera'  # Public username for the Fashiontera channel
 
-    def __len__(self):
-        return len(self.labels)
+# File paths
+RAW_CSV_FILE_PATH = r"C:\Users\hayyu.ragea\AppData\Local\Programs\Python\Python312\EthioMart\EthioMart\data\raw\messages.csv"
+CLEANED_CSV_FILE_PATH = r"C:\Users\hayyu.ragea\AppData\Local\Programs\Python\Python312\EthioMart\EthioMart\data\raw\cleaned_messages.csv"
+LABELED_CONLL_FILE_PATH = r"C:\Users\hayyu.ragea\AppData\Local\Programs\Python\Python312\EthioMart\EthioMart\data\raw\labeled_messages.conll"
 
-# Function to load and preprocess data from the CoNLL format
-def load_data(file_path):
-    texts = []
-    labels = []
-    
-    # Define a mapping for NER labels to numeric ids
-    label_map = {'O': 0, 'B-PRODUCT': 1, 'I-PRODUCT': 2, 'B-PRICE': 3, 'I-PRICE': 4, 'B-LOCATION': 5, 'I-LOCATION': 6}
-    
-    # Load data from .conll file
-    with open(file_path, 'r', encoding='utf-8') as f:
-        tokens = []
-        ner_tags = []
-        for line in f:
-            line = line.strip()
-            if not line:
-                if tokens:
-                    texts.append(tokens)
-                    labels.append([label_map[tag] for tag in ner_tags])
-                    tokens = []
-                    ner_tags = []
-            else:
-                token, tag = line.split()  # Assuming each line has a token and its NER tag
-                tokens.append(token)
-                ner_tags.append(tag)
-    
-    return texts, labels
+# Function to clean the message content
+def clean_message(content):
+    # Remove unnecessary spaces, symbols, etc. (adjust the cleaning steps as needed)
+    content = re.sub(r'\s+', ' ', content).strip()  # Removing extra spaces
+    content = re.sub(r'[^\w\s]', '', content)  # Removing punctuation
+    return content
 
-def align_labels_with_tokens(texts, labels, encodings, tokenizer):
-    aligned_labels = []
-    
-    for i, label in enumerate(labels):
-        word_ids = encodings.word_ids(batch_index=i)
-        label_ids = []
-        previous_word_idx = None
-        
-        for word_idx in word_ids:
-            if word_idx is None:
-                label_ids.append(-100)  # Ignore this token
-            elif word_idx != previous_word_idx:
-                label_ids.append(label[word_idx])  # Use the label for the first token of the word
-            else:
-                label_ids.append(-100)  # Ignore subsequent tokens of the same word
-            previous_word_idx = word_idx
-        
-        aligned_labels.append(label_ids)
-    
-    return aligned_labels
+# Function to label entities (dummy labelling, modify based on your actual entity extraction logic)
+def label_message(content):
+    # In a real scenario, use an NER model here to label the entities
+    words = content.split()
+    labeled_data = []
+    for word in words:
+        if re.match(r'\b\d+\b', word):  # Example: Price (numbers)
+            labeled_data.append(f"{word} B-PRICE")
+        elif word.isupper():  # Example: Product name (all caps)
+            labeled_data.append(f"{word} B-PRODUCT")
+        else:
+            labeled_data.append(f"{word} O")  # O for non-entity words
+    return labeled_data
 
-def main():
-    # Use Google Colab or any other environment with GPU support for faster training
-    # Install necessary libraries
-    # !pip install transformers datasets
+# Function to scrape messages from a channel
+async def main():
+    async with TelegramClient('session_name', API_ID, API_HASH) as client:
+        try:
+            print(f"Attempting to get the entity for username: {CHANNEL_USERNAME}")
+            # Get the channel entity using the public username
+            channel = await client.get_entity(CHANNEL_USERNAME)
+            print(f"Scraping messages from: {CHANNEL_USERNAME}")
+            print(f"Channel ID: {channel.id}")
 
-    # Load the labeled dataset in CoNLL format
-    data_file_path = 'C:/Users/hayyu.ragea/AppData/Local/Programs/Python/Python312/EthioMart/EthioMart/data/raw/labeled_messages.conll'
-    texts, labels = load_data(data_file_path)
+            # Open the raw CSV file to save original messages
+            with open(RAW_CSV_FILE_PATH, mode='w', newline='', encoding='utf-8') as raw_file:
+                raw_writer = csv.writer(raw_file)
+                raw_writer.writerow(["Channel Title", "Channel Username", "Channel ID", "Message ID", "Date", "Sender", "Content"])
 
-    # Debugging: Print the number of unique labels
-    unique_labels = set(np.concatenate(labels))
-    print(f"Unique labels in the dataset: {unique_labels}")
-    print(f"Number of unique labels: {len(unique_labels)}")
+                # Open the cleaned CSV file to save cleaned messages
+                with open(CLEANED_CSV_FILE_PATH, mode='w', newline='', encoding='utf-8') as cleaned_file:
+                    cleaned_writer = csv.writer(cleaned_file)
+                    cleaned_writer.writerow(["Message ID", "Cleaned Content"])
 
-    # Load pre-trained XLM-Roberta model and tokenizer
-    tokenizer = AutoTokenizer.from_pretrained('xlm-roberta-base')
-    model = XLMRobertaForTokenClassification.from_pretrained('xlm-roberta-base', num_labels=len(unique_labels))
+                    # Open the CONLL file to save labeled messages
+                    with open(LABELED_CONLL_FILE_PATH, mode='w', encoding='utf-8') as conll_file:
 
-    # Tokenize data and align labels with tokens
-    encodings = tokenizer(texts, truncation=True, padding=True, is_split_into_words=True)
-    aligned_labels = align_labels_with_tokens(texts, labels, encodings, tokenizer)
+                        # Asynchronously iterate through all messages in the channel
+                        async for message in client.iter_messages(channel):
+                            if message and message.message:
+                                # Write raw message to CSV
+                                raw_writer.writerow([
+                                    channel.title, channel.username, channel.id, message.id,
+                                    message.date, message.sender_id, message.message
+                                ])
 
-    # Create dataset with tokenized inputs and aligned labels
-    dataset = NERDataset(encodings, aligned_labels)
+                                # Clean the message content
+                                cleaned_content = clean_message(message.message)
+                                cleaned_writer.writerow([message.id, cleaned_content])
 
-    # Split the dataset into training and validation sets
-    train_size = int(0.9 * len(dataset))
-    val_size = len(dataset) - train_size
-    train_dataset, val_dataset = torch.utils.data.random_split(dataset, [train_size, val_size])
+                                # Label the cleaned message for NER
+                                labeled_message = label_message(cleaned_content)
+                                
+                                # Write labeled message in CoNLL format (word by word)
+                                for labeled_word in labeled_message:
+                                    word, label = labeled_word.split()
+                                    conll_file.write(f"{word} {label}\n")
+                                conll_file.write("\n")  # Blank line after each message
+                                
+                                print(f"Message ID: {message.id} - Cleaned: {cleaned_content}")
+                            else:
+                                print("Received an empty message.")
 
-    # Set up training arguments
-    training_args = TrainingArguments(
-        output_dir='./results',
-        eval_strategy='epoch',  # Updated deprecated `evaluation_strategy` to `eval_strategy`
-        learning_rate=5e-5,
-        per_device_train_batch_size=16,
-        per_device_eval_batch_size=64,
-        num_train_epochs=3,
-        weight_decay=0.01,
-    )
+            print(f"Messages saved to {RAW_CSV_FILE_PATH}, cleaned messages saved to {CLEANED_CSV_FILE_PATH}, and labeled messages saved to {LABELED_CONLL_FILE_PATH}")
 
-    # Initialize Trainer
-    trainer = Trainer(
-        model=model,
-        args=training_args,
-        train_dataset=train_dataset,
-        eval_dataset=val_dataset,
-        data_collator=DataCollatorForTokenClassification(tokenizer),
-    )
+        except UsernameInvalidError:
+            print("The specified username is invalid or does not exist.")
+        except ChannelPrivateError:
+            print("The channel is private, and you do not have access.")
+        except PeerFloodError:
+            print("You're being rate-limited. Try again later.")
+        except Exception as e:
+            print(f"An error occurred: {e}")
 
-    # Train the model
-    trainer.train()
-
-    # Evaluate the model
-    eval_results = trainer.evaluate()
-    print(f"Evaluation results: {eval_results}")
-
-    # Save the model
-    model.save_pretrained('./fine_tuned_model')
-    tokenizer.save_pretrained('./fine_tuned_model')
-
-if __name__ == "__main__":
-    main()
+if __name__ == '__main__':
+    asyncio.run(main())
